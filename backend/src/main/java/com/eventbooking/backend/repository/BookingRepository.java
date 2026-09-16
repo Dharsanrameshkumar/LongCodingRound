@@ -22,4 +22,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     long countByStudentStudentIdAndStatusIn(Long studentId, List<BookingStatus> statuses);
 
     Optional<Booking> findFirstByStudentStudentIdAndStatusIn(Long studentId, List<BookingStatus> statuses);
+
+    // FIFO: lowest booking_id = earliest in queue
+    Optional<Booking> findFirstByEventEventIdAndStatusOrderByBookingIdAsc(Long eventId, BookingStatus status);
 }

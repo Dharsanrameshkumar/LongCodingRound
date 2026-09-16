@@ -63,17 +63,18 @@ public class EventService {
 
     public EventSummaryResponse getEventSummary(Long eventId) {
         Event event = getEventById(eventId);
-        List<BookingStatus> active = List.of(BookingStatus.ABSENT, BookingStatus.PRESENT);
+        List<BookingStatus> seatOccupying = List.of(BookingStatus.ABSENT, BookingStatus.PRESENT);
 
-        long totalActive = bookingRepository.countByEventEventIdAndStatusIn(eventId, active);
-        long present = bookingRepository.countByEventEventIdAndStatusIn(eventId, List.of(BookingStatus.PRESENT));
-        long absent = bookingRepository.countByEventEventIdAndStatusIn(eventId, List.of(BookingStatus.ABSENT));
-        long cancelled = bookingRepository.countByEventEventIdAndStatusIn(eventId, List.of(BookingStatus.CANCELLED));
-        int available = Math.max(0, event.getMaximumCapacity() - (int) totalActive);
+        long totalActive = bookingRepository.countByEventEventIdAndStatusIn(eventId, seatOccupying);
+        long present    = bookingRepository.countByEventEventIdAndStatusIn(eventId, List.of(BookingStatus.PRESENT));
+        long absent     = bookingRepository.countByEventEventIdAndStatusIn(eventId, List.of(BookingStatus.ABSENT));
+        long cancelled  = bookingRepository.countByEventEventIdAndStatusIn(eventId, List.of(BookingStatus.CANCELLED));
+        long waiting    = bookingRepository.countByEventEventIdAndStatusIn(eventId, List.of(BookingStatus.WAITING));
+        int  available  = Math.max(0, event.getMaximumCapacity() - (int) totalActive);
 
         return new EventSummaryResponse(
                 event.getEventId(), event.getEventName(), event.getDate().toString(),
                 event.getStatus().name(), event.getMaximumCapacity(),
-                totalActive, present, absent, cancelled, available);
+                totalActive, present, absent, cancelled, waiting, available);
     }
 }

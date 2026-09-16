@@ -167,6 +167,7 @@ function EventSummarySection({ user }) {
               { num: summary.totalBookings,   lbl: 'Registered' },
               { num: summary.presentCount,    lbl: 'Checked In' },
               { num: summary.absentCount,     lbl: 'Absent' },
+              { num: summary.waitingCount,    lbl: 'Waiting Queue' },
               { num: summary.cancelledCount,  lbl: 'Cancelled' },
               { num: summary.availableSlots,  lbl: 'Available' },
             ].map(s => (

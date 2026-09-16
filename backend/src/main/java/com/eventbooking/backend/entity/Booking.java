@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 @Table(name = "bookings")
 public class Booking {
 
-    public enum BookingStatus { ABSENT, PRESENT, CANCELLED }
+    public enum BookingStatus { ABSENT, PRESENT, CANCELLED, WAITING }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

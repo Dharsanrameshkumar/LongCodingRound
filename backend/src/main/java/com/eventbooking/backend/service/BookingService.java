@@ -52,23 +52,27 @@ public class BookingService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Event is not open for booking.");
         }
 
-        List<BookingStatus> active = List.of(BookingStatus.ABSENT, BookingStatus.PRESENT);
-
-        long existingActive = bookingRepository.countByStudentStudentIdAndStatusIn(req.getStudentId(), active);
+        // Student must not already have an active (ABSENT/PRESENT) or WAITING booking
+        List<BookingStatus> activeOrWaiting = List.of(BookingStatus.ABSENT, BookingStatus.PRESENT, BookingStatus.WAITING);
+        long existingActive = bookingRepository.countByStudentStudentIdAndStatusIn(req.getStudentId(), activeOrWaiting);
         if (existingActive > 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Student already has an active booking. Cancel it before booking another event.");
+                    "Student already has an active or waiting booking. Cancel it before booking another event.");
         }
 
-        long activeCount = bookingRepository.countByEventEventIdAndStatusIn(req.getEventId(), active);
-        if (activeCount >= event.getMaximumCapacity()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Event is at full capacity.");
-        }
+        // Count only seat-occupying bookings (ABSENT + PRESENT) to check capacity
+        List<BookingStatus> seatOccupying = List.of(BookingStatus.ABSENT, BookingStatus.PRESENT);
+        long activeCount = bookingRepository.countByEventEventIdAndStatusIn(req.getEventId(), seatOccupying);
+
+        // If full → add to WAITING queue instead of rejecting
+        BookingStatus newStatus = (activeCount >= event.getMaximumCapacity())
+                ? BookingStatus.WAITING
+                : BookingStatus.ABSENT;
 
         Booking booking = new Booking();
         booking.setStudent(student);
         booking.setEvent(event);
-        booking.setStatus(BookingStatus.ABSENT);
+        booking.setStatus(newStatus);
         return bookingRepository.save(booking);
     }
 
@@ -116,19 +120,37 @@ public class BookingService {
     public Booking cancel(Long bookingId) {
         Booking booking = getBookingById(bookingId);
 
-        if (booking.getStatus() != BookingStatus.ABSENT) {
+        BookingStatus prevStatus = booking.getStatus();
+
+        if (prevStatus != BookingStatus.ABSENT && prevStatus != BookingStatus.WAITING) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Only ABSENT bookings can be cancelled.");
+                    "Only ABSENT or WAITING bookings can be cancelled.");
         }
 
-        LocalDate eventDate = booking.getEvent().getDate();
-        if (!LocalDate.now().isBefore(eventDate)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Cancellation must be done before the event date.");
+        // Confirmed seat-holders must cancel before the event date
+        if (prevStatus == BookingStatus.ABSENT) {
+            LocalDate eventDate = booking.getEvent().getDate();
+            if (!LocalDate.now().isBefore(eventDate)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Cancellation must be done before the event date.");
+            }
         }
 
         booking.setStatus(BookingStatus.CANCELLED);
-        return bookingRepository.save(booking);
+        bookingRepository.save(booking);
+
+        // Auto-promote the first WAITING student when a confirmed seat is freed (FIFO)
+        if (prevStatus == BookingStatus.ABSENT) {
+            Long eventId = booking.getEvent().getEventId();
+            bookingRepository
+                    .findFirstByEventEventIdAndStatusOrderByBookingIdAsc(eventId, BookingStatus.WAITING)
+                    .ifPresent(next -> {
+                        next.setStatus(BookingStatus.ABSENT);
+                        bookingRepository.save(next);
+                    });
+        }
+
+        return booking;
     }
 
     public List<Booking> getBookingsByStudent(Long studentId) {

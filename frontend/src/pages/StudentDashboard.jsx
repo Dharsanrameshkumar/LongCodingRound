@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Routes, Route, NavLink, useNavigate } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import { getEvents, getBookingsByStudent, createBooking, cancelBooking, checkIn, checkOut } from '../api';
 
 function AvailableEvents({ user }) {
@@ -13,12 +13,17 @@ function AvailableEvents({ user }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const flash = (type, text) => { setMsg({ type, text }); setTimeout(() => setMsg(null), 4000); };
+  const flash = (type, text) => { setMsg({ type, text }); setTimeout(() => setMsg(null), 5000); };
 
   const book = async (eventId) => {
     try {
-      await createBooking({ studentId: user.profileId, eventId });
-      flash('success', 'Booking created successfully! Status: ABSENT');
+      const res = await createBooking({ studentId: user.profileId, eventId });
+      const status = res.data.status;
+      if (status === 'WAITING') {
+        flash('success', 'Event is full — you have been added to the waiting queue. You will be auto-promoted when a seat opens.');
+      } else {
+        flash('success', 'Booking confirmed! Status: ABSENT');
+      }
     } catch (err) {
       flash('error', err.response?.data?.error || 'Booking failed.');
     }
@@ -34,22 +39,19 @@ function AvailableEvents({ user }) {
         ? <p className="empty">No open events available right now.</p>
         : (
           <div className="event-grid">
-            {events.map(e => {
-              const booked = e.maximumCapacity;
-              return (
-                <div className="event-card" key={e.eventId}>
-                  <h3>{e.eventName}</h3>
-                  <div className="meta">Date: <span>{e.date}</span></div>
-                  <div className="meta">Capacity: <span>{e.maximumCapacity}</span></div>
-                  <div className="meta" style={{ marginBottom: 14 }}>
-                    Status: <span className={`badge badge-${e.status?.toLowerCase()}`}>{e.status}</span>
-                  </div>
-                  <button className="btn btn-primary btn-sm" onClick={() => book(e.eventId)}>
-                    Book Event
-                  </button>
+            {events.map(e => (
+              <div className="event-card" key={e.eventId}>
+                <h3>{e.eventName}</h3>
+                <div className="meta">Date: <span>{e.date}</span></div>
+                <div className="meta">Capacity: <span>{e.maximumCapacity}</span></div>
+                <div className="meta" style={{ marginBottom: 14 }}>
+                  Status: <span className={`badge badge-${e.status?.toLowerCase()}`}>{e.status}</span>
                 </div>
-              );
-            })}
+                <button className="btn btn-primary btn-sm" onClick={() => book(e.eventId)}>
+                  Book / Join Queue
+                </button>
+              </div>
+            ))}
           </div>
         )
       }
@@ -67,13 +69,13 @@ function MyBooking({ user }) {
 
   useEffect(() => { load(); }, []);
 
-  const flash = (type, text) => { setMsg({ type, text }); setTimeout(() => setMsg(null), 4000); };
+  const flash = (type, text) => { setMsg({ type, text }); setTimeout(() => setMsg(null), 5000); };
 
   const act = async (action, id) => {
     try {
-      if (action === 'checkin') await checkIn(id);
+      if (action === 'checkin')   await checkIn(id);
       else if (action === 'checkout') await checkOut(id);
-      else if (action === 'cancel') await cancelBooking(id);
+      else if (action === 'cancel')   await cancelBooking(id);
       flash('success', 'Action completed successfully.');
       load();
     } catch (err) {
@@ -81,10 +83,25 @@ function MyBooking({ user }) {
     }
   };
 
+  // Count queue position for a WAITING booking within the same event
+  const queuePositions = {};
+  bookings
+    .filter(b => b.status === 'WAITING')
+    .sort((a, b) => a.bookingId - b.bookingId)
+    .forEach((b, i) => { queuePositions[b.bookingId] = i + 1; });
+
   return (
     <div>
       <h2 className="section-title">My Booking</h2>
       {msg && <div className={`msg msg-${msg.type}`}>{msg.text}</div>}
+
+      {/* Queue notice */}
+      {bookings.some(b => b.status === 'WAITING') && (
+        <div className="msg msg-success" style={{ borderLeft: '3px solid #3730a3', background: '#e0e7ff', color: '#3730a3' }}>
+          You are in the waiting queue. You will be automatically promoted to ABSENT when a seat becomes available.
+        </div>
+      )}
+
       {bookings.length === 0
         ? <p className="empty">You have no bookings yet. Go to Events to book one.</p>
         : (
@@ -107,7 +124,14 @@ function MyBooking({ user }) {
                     <td>#{b.bookingId}</td>
                     <td>{b.event?.eventName}</td>
                     <td>{b.event?.date}</td>
-                    <td><span className={`badge badge-${b.status?.toLowerCase()}`}>{b.status}</span></td>
+                    <td>
+                      <span className={`badge badge-${b.status?.toLowerCase()}`}>{b.status}</span>
+                      {b.status === 'WAITING' && (
+                        <span style={{ fontSize: '.72rem', color: '#3730a3', display: 'block', marginTop: 2 }}>
+                          Queue #{queuePositions[b.bookingId] || '…'}
+                        </span>
+                      )}
+                    </td>
                     <td>{b.checkInTime ? new Date(b.checkInTime).toLocaleString() : '—'}</td>
                     <td>{b.checkOutTime ? new Date(b.checkOutTime).toLocaleString() : '—'}</td>
                     <td>
@@ -122,13 +146,18 @@ function MyBooking({ user }) {
                             </button>
                           </>
                         )}
+                        {b.status === 'WAITING' && (
+                          <button className="btn btn-outline btn-sm" onClick={() => act('cancel', b.bookingId)}>
+                            Leave Queue
+                          </button>
+                        )}
                         {b.status === 'PRESENT' && !b.checkOutTime && (
                           <button className="btn btn-warning btn-sm" onClick={() => act('checkout', b.bookingId)}>
                             Check Out
                           </button>
                         )}
                         {b.status === 'CANCELLED' && <span style={{ color: '#aaa', fontSize: '.8rem' }}>Cancelled</span>}
-                        {b.status === 'PRESENT' && b.checkOutTime && <span style={{ color: '#16a34a', fontSize: '.8rem' }}>Completed</span>}
+                        {b.status === 'PRESENT' && b.checkOutTime && <span style={{ color: '#16a34a', fontSize: '.8rem' }}>Completed ✓</span>}
                       </div>
                     </td>
                   </tr>

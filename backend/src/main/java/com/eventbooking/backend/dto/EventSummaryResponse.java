@@ -10,11 +10,12 @@ public class EventSummaryResponse {
     private long presentCount;
     private long absentCount;
     private long cancelledCount;
+    private long waitingCount;
     private int availableSlots;
 
     public EventSummaryResponse(Long eventId, String eventName, String date, String status,
                                  int maximumCapacity, long totalBookings, long presentCount,
-                                 long absentCount, long cancelledCount, int availableSlots) {
+                                 long absentCount, long cancelledCount, long waitingCount, int availableSlots) {
         this.eventId = eventId;
         this.eventName = eventName;
         this.date = date;
@@ -24,6 +25,7 @@ public class EventSummaryResponse {
         this.presentCount = presentCount;
         this.absentCount = absentCount;
         this.cancelledCount = cancelledCount;
+        this.waitingCount = waitingCount;
         this.availableSlots = availableSlots;
     }
 
@@ -36,5 +38,6 @@ public class EventSummaryResponse {
     public long getPresentCount() { return presentCount; }
     public long getAbsentCount() { return absentCount; }
     public long getCancelledCount() { return cancelledCount; }
+    public long getWaitingCount() { return waitingCount; }
     public int getAvailableSlots() { return availableSlots; }
 }
